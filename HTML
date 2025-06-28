@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toastmasters Ballot Counter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Minimalist Harmony -->
+    <!-- Application Structure Plan: A single-page application divided into two primary sections: "Design Poll" and "Cast Vote / View Results", controlled by tab navigation. The "Design Poll" section allows the poll administrator to add and remove candidates for each award category and includes a password field to toggle results visibility. This section is now restricted to admin access. The "Cast Vote / View Results" section now features a separate, always-visible "Total Votes Cast" section, and provides radio buttons for voting (visible until a vote is cast), with detailed results only visible when in admin mode. The app prevents duplicate votes per browser and confirms submission with an alert. This two-part structure separates administration from user interaction and vote viewing, ensuring a clear, intuitive flow for both poll creators and voters, while protecting results anonymity and vote integrity. -->
+    <!-- Visualization & Content Choices: The application primarily uses interactive form elements and lists. No complex charts are needed as the data is simple counts for discrete categories. Report Info -> Goal -> Viz/Presentation Method -> Interaction -> Justification -> Library/Method. 1. Candidate Entry -> Input/Organize -> Text Input & Dynamic List -> Add/Remove buttons -> Enables flexible poll creation; HTML/JS. Admin password input to control visibility of this section's content. 2. Voting -> Data Collection -> Radio Buttons -> Select & Submit -> Ensures single choice per browser, anonymous submission, confirmed by alert. Total vote count is always displayed in a dedicated, prominent box. 3. Results Display -> Inform -> Ordered List with Counts -> Automatic Update -> Provides immediate feedback on poll status, visible only in admin mode; HTML/JS. Icons added to categories for visual appeal. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcfbf6; /* Warm neutral background */
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+        }
+        .tab-active {
+            border-bottom: 3px solid #0d9488; /* Teal accent */
+            color: #0d9488;
+            font-weight: 600;
+        }
+        .tab-inactive {
+            border-bottom: 3px solid transparent;
+            color: #6b7280;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .vote-card {
+            background-color: #f9fafb; /* Lightest gray for cards */
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+        }
+        .vote-button {
+            background-color: #0d9488; /* Teal for primary actions */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .vote-button:hover {
+            background-color: #0f766e;
+        }
+        .reset-button {
+            background-color: #ef4444; /* Red for destructive action */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .reset-button:hover {
+            background-color: #dc2626;
+        }
+        .result-bar-container {
+            background-color: #e5e7eb; /* Light gray for background of bars */
+            border-radius: 0.25rem;
+            height: 1.25rem;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .result-bar {
+            background-color: #34d399; /* Green for result bars */
+            height: 100%;
+            transition: width 0.5s ease-out;
+        }
+        .loading-spinner { /* Keeping spinner styles just in case for future LLM features */
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #ffffff;
+            border-radius: 50%;
+            width: 12px;
+            height: 12px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .ballot-box {
+            background-color: #facc15; /* Yellow-400 */
+            border-radius: 0.75rem;
+            padding: 0.75rem 1.5rem; /* Adjusted padding for rectangular shape */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            width: fit-content; /* Allow width to fit content based on padding */
+            height: fit-content; /* Allow height to fit content based on padding */
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-fcfbf6 min-h-screen flex items-center justify-center p-4">
+
+    <div class="container mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800"> Skwim Toastmasters Ballot </h1>
+            <p class="text-gray-600 mt-2">Vote for Best Speaker, Table Topic, and Evaluator!</p>
+        </header>
+
+        <nav class="flex justify-center border-b border-gray-200 mb-6">
+            <button id="design-poll-tab" class="px-6 py-3 text-lg tab-active transition-colors duration-200">Edit Ballot</button>
+            <button id="cast-vote-tab" class="px-6 py-3 text-lg tab-inactive transition-colors duration-200">Vote</button>
+        </nav>
+
+        <!-- Design Poll Section -->
+        <section id="design-poll-section" class="active-section">
+            <h2 class="text-2xl font-bold text-gray-700 mb-4">Edit Ballot</h2>
+            <p class="text-gray-600 mb-6"> This section is for the Ballot Counter only! As the Ballot Counter, add the names of all the qualifying speakers, table topics participants, and evaluators for today's meeting. Attendees will be able to vote for these options.</p>
+
+            <div id="design-poll-content" class="grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
+                <!-- Speaker Category -->
+                <div class="vote-card">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-800">🎙️ Best Speaker</h3>
+                    <div class="flex mb-3">
+                        <input type="text" id="speaker-input" placeholder="Speaker name" class="flex-grow rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm p-2">
+                        <button onclick="addCandidate('speaker')" class="ml-2 bg-teal-600 text-white px-3 py-1 rounded-md text-sm hover:bg-teal-700 transition-colors">Add</button>
+                    </div>
+                    <ul id="speaker-list" class="list-none space-y-2"></ul>
+                </div>
+
+                <!-- Table Topic Category -->
+                <div class="vote-card">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-800">💡 Best Table Topic</h3>
+                    <div class="flex mb-3">
+                        <input type="text" id="tableTopic-input" placeholder="Table Topic participant" class="flex-grow rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm p-2">
+                        <button onclick="addCandidate('tableTopic')" class="ml-2 bg-teal-600 text-white px-3 py-1 rounded-md text-sm hover:bg-teal-700 transition-colors">Add</button>
+                    </div>
+                    <ul id="tableTopic-list" class="list-none space-y-2"></ul>
+                </div>
+
+                <!-- Evaluator Category -->
+                <div class="vote-card">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-800">✍️ Best Evaluator</h3>
+                    <div class="flex mb-3">
+                        <input type="text" id="evaluator-input" placeholder="Evaluator name" class="flex-grow rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm p-2">
+                        <button onclick="addCandidate('evaluator')" class="ml-2 bg-teal-600 text-white px-3 py-1 rounded-md text-sm hover:bg-teal-700 transition-colors">Add</button>
+                    </div>
+                    <ul id="evaluator-list" class="list-none space-y-2"></ul>
+                </div>
+            </div>
+            <div class="text-center mt-8">
+                <div class="mb-4">
+                    <label for="admin-password" class="block text-sm font-medium text-gray-700 mb-2">Enter Password to View Results and Edit Ballot:</label>
+                    <input type="password" id="admin-password" class="inline-block w-64 rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm p-2">
+                    <button onclick="toggleAdminMode()" id="admin-mode-btn" class="ml-2 bg-gray-500 text-white px-4 py-2 rounded-md text-sm hover:bg-gray-600 transition-colors">Enter Admin Mode</button>
+                    <p id="admin-feedback" class="text-red-500 text-sm mt-2 hidden">Incorrect password!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cast Vote-->
+        <section id="cast-vote-section" class="hidden">
+            <h2 class="text-2xl font-bold text-gray-700 mb-4">Cast Your Vote</h2>
+            <p class="text-gray-600 mb-6">Select your choice for each category below and submit your anonymous vote.</p>
+
+            <!-- Total Votes Cast section - Always visible on Vote tab -->
+            <div class="flex justify-center mb-6">
+                <div id="total-voters-ballot-box" class="ballot-box">
+                    <span class="text-sm font-medium">Total Votes Cast</span>
+                    <span id="total-voters-number" class="text-4xl font-bold text-white mt-1">0</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <!-- Voting Interface Card -->
+                <div class="vote-card p-6">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Your Vote</h3>
+                
+                    <div id="voting-interface"> <!-- Wrapper for voting elements -->
+                        <div id="voting-options" class="space-y-4">
+                            <!-- Speaker Voting -->
+                            <div>
+                                <p class="font-medium text-gray-700 mb-2">🎙️ Best Speaker:</p>
+                                <div id="vote-speaker-options" class="space-y-1"></div>
+                            </div>
+                            <!-- Table Topic Voting -->
+                            <div>
+                                <p class="font-medium text-gray-700 mb-2">💡 Best Table Topic:</p>
+                                <div id="vote-tableTopic-options" class="space-y-1"></div>
+                            </div>
+                            <!-- Evaluator Voting -->
+                            <div>
+                                <p class="font-medium text-gray-700 mb-2">✍️ Best Evaluator:</p>
+                                <div id="vote-evaluator-options" class="space-y-1"></div>
+                            </div>
+                        </div>
+                        <button onclick="submitVote()" id="submit-vote-btn" class="vote-button mt-6 w-full">Submit My Vote Anonymously</button>
+                    </div>
+                    <div id="post-vote-message-container" class="hidden mt-6 flex justify-center items-center">
+                        <p id="post-vote-message" class="text-center text-green-700 font-semibold"></p>
+                    </div>
+                </div>
+
+                <!-- Results Display -->
+                <div id="results-card" class="vote-card p-6 hidden"> <!-- Hidden by default -->
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Results</h3>
+                    <div id="poll-results" class="space-y-6">
+                        <div>
+                            <p class="font-medium text-gray-700 mb-2">🎙️ Best Speaker:</p>
+                            <div id="results-speaker" class="space-y-2"></div>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-700 mb-2">💡 Best Table Topic:</p>
+                            <div id="results-tableTopic" class="space-y-2"></div>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-700 mb-2">✍️ Best Evaluator:</p>
+                            <div id="results-evaluator" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Global poll data structure
+        let pollData = {
+            speaker: {
+                candidates: [],
+                votes: {}
+            },
+            tableTopic: {
+                candidates: [],
+                votes: {}
+            },
+            evaluator: {
+                candidates: [],
+                votes: {}
+            },
+            totalVoters: 0 // New field to track total unique voters
+        };
+
+        const ADMIN_PASSWORD = "toastmasters_admin"; // Simple hardcoded password for SPA
+
+        let isAdminMode = false; // Tracks if the user is in admin mode
+
+        // Function to save pollData to localStorage
+        function savePollData() {
+            localStorage.setItem('toastmastersPollData', JSON.stringify(pollData));
+        }
+
+        // Function to load pollData from localStorage
+        function loadPollData() {
+            const storedData = localStorage.getItem('toastmastersPollData');
+            if (storedData) {
+                const parsedData = JSON.parse(storedData);
+                // Merge loaded data with default structure to ensure new fields like totalVoters exist
+                pollData = {
+                    ...pollData, // Start with default structure
+                    ...parsedData, // Overlay loaded data
+                    speaker: { ...parsedData.speaker, candidates: parsedData.speaker.candidates, votes: parsedData.speaker.votes },
+                    tableTopic: { ...parsedData.tableTopic, candidates: parsedData.tableTopic.candidates, votes: parsedData.tableTopic.votes },
+                    evaluator: { ...parsedData.evaluator, candidates: parsedData.evaluator.candidates, votes: parsedData.evaluator.votes }
+                };
+                // Ensure totalVoters is a number, defaults to 0 if not present
+                if (typeof pollData.totalVoters !== 'number') {
+                    pollData.totalVoters = 0;
+                }
+            }
+        }
+
+        // Initialize candidate lists on load
+        function initializeDesignPoll() {
+            renderCandidateList('speaker');
+            renderCandidateList('tableTopic');
+            renderCandidateList('evaluator');
+        }
+
+        // Render candidates in the design poll section
+        function renderCandidateList(category) {
+            const listElement = document.getElementById(`${category}-list`);
+            listElement.innerHTML = ''; // Clear existing list
+            pollData[category].candidates.forEach(candidate => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center bg-gray-100 p-2 rounded-md';
+                li.innerHTML = `
+                    <div class="flex-grow flex flex-col">
+                        <span>${candidate}</span>
+                    </div>
+                    <div class="flex items-center">
+                        <button onclick="removeCandidate('${category}', '${candidate}')" class="text-red-500 hover:text-red-700 text-sm">&times;</button>
+                    </div>
+                `;
+                listElement.appendChild(li);
+            });
+        }
+
+        // Add a candidate
+        function addCandidate(category) {
+            const inputElement = document.getElementById(`${category}-input`);
+            const candidateName = inputElement.value.trim();
+            if (candidateName && !pollData[category].candidates.includes(candidateName)) {
+                pollData[category].candidates.push(candidateName);
+                pollData[category].votes[candidateName] = 0; // Initialize vote count
+                inputElement.value = ''; // Clear input
+                renderCandidateList(category);
+                savePollData();
+            } else if (pollData[category].candidates.includes(candidateName)) {
+                alert(`"${candidateName}" is already added as a candidate for ${category}.`);
+            }
+        }
+
+        // Remove a candidate
+        function removeCandidate(category, candidateToRemove) {
+            pollData[category].candidates = pollData[category].candidates.filter(c => c !== candidateToRemove);
+            delete pollData[category].votes[candidateToRemove]; // Remove vote count
+            renderCandidateList(category);
+            savePollData();
+            renderVotingOptions(); // Update voting options if a candidate is removed
+            renderResults(); // Update results if a candidate is removed
+        }
+
+        // Reset all poll data function (removed from button but kept for potential direct calls if needed)
+        function resetPoll() {
+            if (confirm("Are you sure you want to reset all poll data (candidates and votes)? This cannot be undone.")) {
+                pollData = {
+                    speaker: { candidates: [], votes: {} },
+                    tableTopic: { candidates: [], votes: {} },
+                    evaluator: { candidates: [], votes: {} },
+                    totalVoters: 0
+                };
+                savePollData();
+                localStorage.removeItem('hasVoted'); // Clear the vote flag for this browser
+
+                // Reset UI for admin mode and visibility
+                isAdminMode = false;
+                document.getElementById('admin-password').value = '';
+                document.getElementById('admin-mode-btn').textContent = 'Enter Admin Mode';
+                document.getElementById('admin-mode-btn').classList.remove('bg-red-500', 'hover:bg-red-600');
+                document.getElementById('admin-mode-btn').classList.add('bg-gray-500', 'hover:bg-gray-600');
+                document.getElementById('admin-feedback').classList.add('hidden');
+
+                document.getElementById('design-poll-content').classList.add('hidden');
+                // The resetPollBtn is now entirely removed from HTML. No need to hide/show it.
+                document.getElementById('results-card').classList.add('hidden');
+
+                initializeDesignPoll();
+                renderVotingOptions();
+                renderResults();
+                updateTotalVotersDisplay();
+
+                // Reset post-vote message and show voting interface
+                document.getElementById('post-vote-message-container').classList.add('hidden');
+                document.getElementById('voting-interface').classList.remove('hidden');
+                document.getElementById('total-voters-ballot-box').classList.add('hidden'); // Hide on reset until vote or reload
+
+                alert("Poll data has been reset. You are now in regular user mode. Please re-enter the admin password to access edit mode.");
+            }
+        }
+
+        // Render voting options for members
+        function renderVotingOptions() {
+            ['speaker', 'tableTopic', 'evaluator'].forEach(category => {
+                const optionsDiv = document.getElementById(`vote-${category}-options`);
+                optionsDiv.innerHTML = pollData[category].candidates.length > 0 ? '' : `<p class="text-gray-500">No candidates available. Please ask the Ballot Counter to add names.</p>`;
+                pollData[category].candidates.forEach(candidate => {
+                    const label = document.createElement('label');
+                    label.className = 'flex items-start space-x-2 text-gray-700 cursor-pointer';
+                    label.innerHTML = `
+                        <input type="radio" name="vote-${category}" value="${candidate}" class="form-radio h-4 w-4 text-teal-600 focus:ring-teal-500 mt-1">
+                        <div class="flex flex-col">
+                            <span>${candidate}</span>
+                        </div>
+                    `;
+                    optionsDiv.appendChild(label);
+                });
+            });
+
+            // Check if user has already voted and update UI accordingly
+            if (localStorage.getItem('hasVoted') === 'true') {
+                document.getElementById('voting-interface').classList.add('hidden');
+                document.getElementById('post-vote-message-container').classList.remove('hidden'); // Show message container
+                document.getElementById('post-vote-message').textContent = " 🎉 Thank you for voting! Winners will be announced at the end of the meeting.";
+            } else {
+                document.getElementById('voting-interface').classList.remove('hidden');
+                document.getElementById('post-vote-message-container').classList.add('hidden'); // Hide message container
+            }
+            updateTotalVotersDisplay(); // Ensure total voters display is updated
+            // The total voters box should always be visible on this tab, regardless of voting status
+            document.getElementById('total-voters-ballot-box').classList.remove('hidden');
+        }
+
+        // Submit a vote
+        function submitVote() {
+            if (localStorage.getItem('hasVoted') === 'true') {
+                alert("You have already cast your vote for this meeting.");
+                return;
+            }
+
+            const selectedVotes = {};
+            let voted = false;
+
+            ['speaker', 'tableTopic', 'evaluator'].forEach(category => {
+                const selected = document.querySelector(`input[name="vote-${category}"]:checked`);
+                if (selected) {
+                    selectedVotes[category] = selected.value;
+                    voted = true;
+                }
+            });
+
+            if (!voted) {
+                alert("Please select at least one option to vote.");
+                return;
+            }
+
+            // Anonymously record votes
+            for (const category in selectedVotes) {
+                const candidate = selectedVotes[category];
+                if (pollData[category].votes[candidate] !== undefined) { // Ensure candidate exists
+                    pollData[category].votes[candidate]++;
+                }
+            }
+            pollData.totalVoters++; // Increment total voters count
+            savePollData();
+            localStorage.setItem('hasVoted', 'true'); // Mark that this user has voted
+            renderResults(); // Update results (if admin mode is active)
+            updateTotalVotersDisplay(); // Update total voters display
+
+            // Hide voting form and display message (now using alert)
+            alert("🎉 Thank you for voting! Winners will be announced at the end of the meeting.");
+
+            document.getElementById('voting-interface').classList.add('hidden');
+            document.getElementById('post-vote-message-container').classList.remove('hidden'); // Show message container
+            document.getElementById('post-vote-message').textContent = "Thank you for voting! Winners will be announced at the end of the meeting."; // Keep text for when user returns
+        }
+
+        // Render real-time results
+        function renderResults() {
+            ['speaker', 'tableTopic', 'evaluator'].forEach(category => {
+                const resultsDiv = document.getElementById(`results-${category}`);
+                resultsDiv.innerHTML = ''; // Clear existing results
+
+                const candidatesWithVotes = Object.entries(pollData[category].votes)
+                    .map(([name, count]) => ({ name, count }))
+                    .sort((a, b) => b.count - a.count); // Sort by votes, descending
+
+                const totalVotes = candidatesWithVotes.reduce((sum, c) => sum + c.count, 0);
+
+                if (candidatesWithVotes.length === 0) {
+                    resultsDiv.innerHTML = `<p class="text-gray-500">No votes yet or no candidates defined.</p>`;
+                    return;
+                }
+
+                candidatesWithVotes.forEach(item => {
+                    const percentage = totalVotes > 0 ? (item.count / totalVotes) * 100 : 0;
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'mb-2';
+                    resultItem.innerHTML = `
+                        <div class="flex justify-between text-sm font-medium text-gray-700">
+                            <span>${item.name}</span>
+                            <span>${item.count} vote${item.count !== 1 ? 's' : ''} (${percentage.toFixed(1)}%)</span>
+                        </div>
+                        <div class="result-bar-container">
+                            <div class="result-bar" style="width: ${percentage}%;"></div>
+                        </div>
+                    `;
+                    resultsDiv.appendChild(resultItem);
+                });
+            });
+        }
+
+        // Updates the total voters display
+        function updateTotalVotersDisplay() {
+            document.getElementById('total-voters-number').textContent = pollData.totalVoters;
+        }
+
+        // Toggle admin mode and results visibility
+        function toggleAdminMode() {
+            const passwordInput = document.getElementById('admin-password');
+            const adminFeedback = document.getElementById('admin-feedback');
+            const resultsCard = document.getElementById('results-card');
+            const adminButton = document.getElementById('admin-mode-btn');
+            const designPollContent = document.getElementById('design-poll-content'); // Get the content wrapper
+            // const resetPollBtn = document.getElementById('reset-poll-btn'); // Removed as per request
+
+            if (isAdminMode) { // If currently in admin mode, exit
+                isAdminMode = false;
+                resultsCard.classList.add('hidden');
+                designPollContent.classList.add('hidden'); // Hide design content
+                // resetPollBtn.classList.add('hidden'); // Removed as per request
+                adminButton.textContent = 'Enter Admin Mode';
+                adminButton.classList.remove('bg-red-500', 'hover:bg-red-600');
+                adminButton.classList.add('bg-gray-500', 'hover:bg-gray-600');
+                passwordInput.value = ''; // Clear password on exit
+                adminFeedback.classList.add('hidden');
+            } else { // Try to enter admin mode
+                if (passwordInput.value === ADMIN_PASSWORD) {
+                    isAdminMode = true;
+                    // If currently on the voting tab, show results card
+                    // This logic is now handled by the tab switching, simplified here.
+                    // If we are in admin mode and the current section is cast-vote-section, display results.
+                    if (!document.getElementById('cast-vote-section').classList.contains('hidden')) {
+                         resultsCard.classList.remove('hidden');
+                         renderResults();
+                    }
+
+                    designPollContent.classList.remove('hidden'); // Show design content
+                    // resetPollBtn.classList.remove('hidden'); // Removed as per request
+                    adminButton.textContent = 'Exit Admin Mode';
+                    adminButton.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+                    adminButton.classList.add('bg-red-500', 'hover:bg-red-600');
+                    adminFeedback.classList.add('hidden');
+                } else {
+                    adminFeedback.classList.remove('hidden');
+                    resultsCard.classList.add('hidden');
+                    designPollContent.classList.add('hidden'); // Keep design content hidden on failed login
+                    // resetPollBtn.classList.add('hidden'); // Removed as per request
+                }
+            }
+        }
+
+
+        // Tab switching logic
+        document.querySelectorAll('nav button').forEach(tabButton => {
+            tabButton.addEventListener('click', () => {
+                // Get the main sections
+                const designSection = document.getElementById('design-poll-section');
+                const castVoteSection = document.getElementById('cast-vote-section');
+                const resultsCard = document.getElementById('results-card');
+
+                // Update tab visual state
+                document.querySelectorAll('.tab-active').forEach(tab => {
+                    tab.classList.remove('tab-active');
+                    tab.classList.add('tab-inactive');
+                });
+                tabButton.classList.add('tab-active');
+                tabButton.classList.remove('tab-inactive');
+                
+                // Show/hide main sections and manage their content visibility
+                if (tabButton.id === 'design-poll-tab') {
+                    designSection.classList.remove('hidden');
+                    castVoteSection.classList.add('hidden');
+                    
+                    // Admin-only content visibility
+                    if (isAdminMode) {
+                        document.getElementById('design-poll-content').classList.remove('hidden');
+                    } else {
+                        document.getElementById('design-poll-content').classList.add('hidden');
+                    }
+                    resultsCard.classList.add('hidden'); // Hide results when on design tab
+
+                } else if (tabButton.id === 'cast-vote-tab') {
+                    designSection.classList.add('hidden');
+                    castVoteSection.classList.remove('hidden');
+                    renderVotingOptions(); // Always re-render voting options to get latest state
+
+                    // Results card visibility based on admin mode
+                    if (isAdminMode) {
+                        resultsCard.classList.remove('hidden');
+                        renderResults();
+                    } else {
+                        resultsCard.classList.add('hidden');
+                    }
+                    updateTotalVotersDisplay(); // Update total voters display when switching to vote tab
+                }
+            });
+        });
+
+
+        // Initial load and render
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPollData();
+            initializeDesignPoll(); // Renders the candidate lists on the design tab
+            // Manually set initial tab state to 'Edit Ballot'
+            document.getElementById('design-poll-tab').click(); // This will trigger the tab switching logic
+        });
+    </script>
+</body>
+</html>
